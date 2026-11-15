@@ -1,0 +1,140 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Stores the authenticated user's display name, status message, and optional profile photo.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Firebase Auth UID of the user."
+        },
+        "displayName": {
+          "type": "string",
+          "description": "User's display name (1-40 characters)."
+        },
+        "statusMessage": {
+          "type": "string",
+          "description": "User's status message (0-100 characters)."
+        },
+        "photoBase64": {
+          "type": "string",
+          "description": "Optional compressed JPEG base64 thumbnail of the user's profile photo (up to 80000 chars)."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when the profile was created via FieldValue.serverTimestamp()."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when the profile was updated via FieldValue.serverTimestamp()."
+        }
+      },
+      "required": ["userId", "displayName", "statusMessage", "createdAt", "updatedAt"]
+    },
+    "ChatGroup": {
+      "title": "ChatGroup",
+      "description": "Represents a single or multi-user group chat room identified by an invite code document ID.",
+      "type": "object",
+      "properties": {
+        "ownerId": {
+          "type": "string",
+          "description": "Firebase Auth UID of the group creator."
+        },
+        "name": {
+          "type": "string",
+          "description": "Group chat room title (1-50 characters)."
+        },
+        "description": {
+          "type": "string",
+          "description": "Short group topic or description (0-120 characters)."
+        },
+        "memberUids": {
+          "type": "array",
+          "description": "Bounded list (1-50) of authenticated member UIDs participating in the group."
+        },
+        "lastMessagePreview": {
+          "type": "string",
+          "description": "Preview of the latest message sent in the group (0-120 characters)."
+        },
+        "lastSenderName": {
+          "type": "string",
+          "description": "Sender name of the latest message (0-40 characters)."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when the group was created via FieldValue.serverTimestamp()."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when the group was last updated via FieldValue.serverTimestamp()."
+        }
+      },
+      "required": ["ownerId", "name", "description", "memberUids", "lastMessagePreview", "lastSenderName", "createdAt", "updatedAt"]
+    },
+    "GroupMessage": {
+      "title": "GroupMessage",
+      "description": "Represents a chat message inside a group chat room with sender identity, photo, status, and content.",
+      "type": "object",
+      "properties": {
+        "groupId": {
+          "type": "string",
+          "description": "Parent chat group document ID."
+        },
+        "senderId": {
+          "type": "string",
+          "description": "Firebase Auth UID of the message author."
+        },
+        "senderName": {
+          "type": "string",
+          "description": "Sender name entered by the user (1-40 characters)."
+        },
+        "senderStatus": {
+          "type": "string",
+          "description": "Sender status message snapshot at send time (0-100 characters)."
+        },
+        "senderPhotoBase64": {
+          "type": "string",
+          "description": "Optional compressed JPEG base64 thumbnail of the sender's profile photo."
+        },
+        "content": {
+          "type": "string",
+          "description": "Message text content (1-1000 characters)."
+        },
+        "memberUids": {
+          "type": "array",
+          "description": "Denormalized list of group member UIDs for rule-enforced query isolation."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when the message was sent via FieldValue.serverTimestamp()."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when the message was last updated via FieldValue.serverTimestamp()."
+        }
+      },
+      "required": ["groupId", "senderId", "senderName", "senderStatus", "content", "memberUids", "createdAt", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "Authenticated user profile with display name, status message, and profile photo."
+    },
+    "/groups/{groupId}": {
+      "schema": { "$ref": "#/entities/ChatGroup" },
+      "description": "Group chat rooms supporting both personal and multi-user conversations."
+    },
+    "/groups/{groupId}/messages/{messageId}": {
+      "schema": { "$ref": "#/entities/GroupMessage" },
+      "description": "Real-time messages within a group chat room."
+    }
+  }
+}

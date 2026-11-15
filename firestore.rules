@@ -1,0 +1,180 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidTimestamp(ts) {
+      return ts is timestamp && ts <= request.time;
+    }
+
+    function isValidUserProfile(data, userId) {
+      return data.userId is string &&
+             data.userId == userId &&
+             data.userId == request.auth.uid &&
+             data.userId.size() <= 128 &&
+             data.displayName is string &&
+             data.displayName.size() >= 1 &&
+             data.displayName.size() <= 40 &&
+             data.statusMessage is string &&
+             data.statusMessage.size() <= 100 &&
+             (!('photoBase64' in data) || data.photoBase64 == null || (data.photoBase64 is string && data.photoBase64.size() <= 80000));
+    }
+
+    function isValidChatGroup(data) {
+      return data.ownerId is string &&
+             data.ownerId.size() >= 1 &&
+             data.ownerId.size() <= 128 &&
+             data.name is string &&
+             data.name.size() >= 1 &&
+             data.name.size() <= 50 &&
+             data.description is string &&
+             data.description.size() <= 120 &&
+             data.lastMessagePreview is string &&
+             data.lastMessagePreview.size() <= 120 &&
+             data.lastSenderName is string &&
+             data.lastSenderName.size() <= 40 &&
+             data.memberUids is list &&
+             data.memberUids.size() >= 1 &&
+             data.memberUids.size() <= 50 &&
+             data.memberUids[0] is string;
+    }
+
+    function isValidGroupMessage(data, groupId) {
+      return data.groupId is string &&
+             data.groupId == groupId &&
+             data.groupId.size() <= 128 &&
+             data.senderId is string &&
+             data.senderId == request.auth.uid &&
+             data.senderId.size() <= 128 &&
+             data.senderName is string &&
+             data.senderName.size() >= 1 &&
+             data.senderName.size() <= 40 &&
+             data.senderStatus is string &&
+             data.senderStatus.size() <= 100 &&
+             (!('senderPhotoBase64' in data) || data.senderPhotoBase64 == null || (data.senderPhotoBase64 is string && data.senderPhotoBase64.size() <= 80000)) &&
+             data.content is string &&
+             data.content.size() >= 1 &&
+             data.content.size() <= 1000 &&
+             data.memberUids is list &&
+             data.memberUids.size() >= 1 &&
+             data.memberUids.size() <= 50 &&
+             data.memberUids[0] is string &&
+             request.auth.uid in data.memberUids;
+    }
+
+    match /users/{userId} {
+      allow get: if isSignedIn() && isValidId(userId) && request.auth.uid == userId;
+      allow list: if false;
+
+      allow create: if isSignedIn() &&
+                       isValidId(userId) &&
+                       request.auth.uid == userId &&
+                       incoming().keys().hasAll(['userId', 'displayName', 'statusMessage', 'createdAt', 'updatedAt']) &&
+                       incoming().keys().hasOnly(['userId', 'displayName', 'statusMessage', 'photoBase64', 'createdAt', 'updatedAt']) &&
+                       isValidTimestamp(incoming().createdAt) &&
+                       isValidTimestamp(incoming().updatedAt) &&
+                       isValidUserProfile(incoming(), userId);
+
+      allow update: if isSignedIn() &&
+                       isValidId(userId) &&
+                       request.auth.uid == userId &&
+                       isValidUserProfile(incoming(), userId) &&
+                       incoming().userId == existing().userId &&
+                       incoming().createdAt == existing().createdAt &&
+                       isValidTimestamp(incoming().updatedAt) &&
+                       incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'statusMessage', 'photoBase64', 'updatedAt']);
+
+      allow delete: if isSignedIn() && isValidId(userId) && request.auth.uid == userId;
+    }
+
+    match /groups/{groupId} {
+      allow get: if isSignedIn() && isValidId(groupId) && request.auth.uid in resource.data.memberUids;
+      allow list: if isSignedIn() && request.auth.uid in resource.data.memberUids;
+
+      allow create: if isSignedIn() &&
+                       isValidId(groupId) &&
+                       incoming().keys().hasAll(['ownerId', 'name', 'description', 'memberUids', 'lastMessagePreview', 'lastSenderName', 'createdAt', 'updatedAt']) &&
+                       incoming().keys().hasOnly(['ownerId', 'name', 'description', 'memberUids', 'lastMessagePreview', 'lastSenderName', 'createdAt', 'updatedAt']) &&
+                       isValidTimestamp(incoming().createdAt) &&
+                       isValidTimestamp(incoming().updatedAt) &&
+                       isValidChatGroup(incoming()) &&
+                       incoming().ownerId == request.auth.uid &&
+                       incoming().memberUids.size() == 1 &&
+                       request.auth.uid in incoming().memberUids;
+
+      allow update: if isSignedIn() &&
+                       isValidId(groupId) &&
+                       isValidChatGroup(incoming()) &&
+                       incoming().ownerId == existing().ownerId &&
+                       incoming().createdAt == existing().createdAt &&
+                       isValidTimestamp(incoming().updatedAt) &&
+                       (
+                         (request.auth.uid in existing().memberUids &&
+                          incoming().memberUids == existing().memberUids &&
+                          incoming().diff(existing()).affectedKeys().hasOnly(['name', 'description', 'lastMessagePreview', 'lastSenderName', 'updatedAt']))
+                         ||
+                         (!(request.auth.uid in existing().memberUids) &&
+                          incoming().memberUids.size() == existing().memberUids.size() + 1 &&
+                          incoming().memberUids.hasAll(existing().memberUids) &&
+                          request.auth.uid in incoming().memberUids &&
+                          incoming().diff(existing()).affectedKeys().hasOnly(['memberUids', 'updatedAt']))
+                         ||
+                         (request.auth.uid in existing().memberUids &&
+                          existing().ownerId != request.auth.uid &&
+                          incoming().memberUids.size() == existing().memberUids.size() - 1 &&
+                          existing().memberUids.hasAll(incoming().memberUids) &&
+                          !(request.auth.uid in incoming().memberUids) &&
+                          incoming().diff(existing()).affectedKeys().hasOnly(['memberUids', 'updatedAt']))
+                       );
+
+      allow delete: if isSignedIn() && isValidId(groupId) && resource.data.ownerId == request.auth.uid;
+
+      match /messages/{messageId} {
+        allow get: if isSignedIn() && isValidId(groupId) && isValidId(messageId) && request.auth.uid in resource.data.memberUids;
+        allow list: if isSignedIn() && isValidId(groupId) && request.auth.uid in resource.data.memberUids;
+
+        allow create: if isSignedIn() &&
+                         isValidId(groupId) &&
+                         isValidId(messageId) &&
+                         incoming().keys().hasAll(['groupId', 'senderId', 'senderName', 'senderStatus', 'content', 'memberUids', 'createdAt', 'updatedAt']) &&
+                         incoming().keys().hasOnly(['groupId', 'senderId', 'senderName', 'senderStatus', 'senderPhotoBase64', 'content', 'memberUids', 'createdAt', 'updatedAt']) &&
+                         isValidTimestamp(incoming().createdAt) &&
+                         isValidTimestamp(incoming().updatedAt) &&
+                         isValidGroupMessage(incoming(), groupId) &&
+                         exists(/databases/$(database)/documents/groups/$(groupId)) &&
+                         request.auth.uid in get(/databases/$(database)/documents/groups/$(groupId)).data.memberUids;
+
+        allow update: if isSignedIn() &&
+                         isValidId(groupId) &&
+                         isValidId(messageId) &&
+                         isValidGroupMessage(incoming(), groupId) &&
+                         existing().senderId == request.auth.uid &&
+                         incoming().senderId == existing().senderId &&
+                         incoming().groupId == existing().groupId &&
+                         incoming().createdAt == existing().createdAt &&
+                         isValidTimestamp(incoming().updatedAt) &&
+                         incoming().diff(existing()).affectedKeys().hasOnly(['senderName', 'senderStatus', 'senderPhotoBase64', 'content', 'updatedAt']);
+
+        allow delete: if isSignedIn() && isValidId(groupId) && isValidId(messageId) && resource.data.senderId == request.auth.uid;
+      }
+    }
+  }
+}

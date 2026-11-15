@@ -1,0 +1,6 @@
+{
+  "name": "채팅톡",
+  "description": "이름을 입력하고 실시간으로 대화 내용을 주고받는 채팅 앱",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
